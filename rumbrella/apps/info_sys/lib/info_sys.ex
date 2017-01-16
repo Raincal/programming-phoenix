@@ -1,5 +1,11 @@
-defmodule Rumbl.InfoSys do
-  @backends [Rumbl.InfoSys.Wolfram]
+defmodule InfoSys do
+  use Application
+
+  def start(_type, _args) do
+    InfoSys.Supervisor.start_link()
+  end
+
+  @backends [InfoSys.Wolfram]
 
   defmodule Result do
     defstruct score: 0, text: nil, url: nil, backend: nil
@@ -23,14 +29,14 @@ defmodule Rumbl.InfoSys do
   defp spawn_query(backend, query, limit) do
     query_ref = make_ref()
     opts = [backend, query, query_ref, self(), limit]
-    {:ok, pid} = Supervisor.start_child(Rumbl.InfoSys.Supervisor, opts)
+    {:ok, pid} = Supervisor.start_child(InfoSys.Supervisor, opts)
     monitor_ref = Process.monitor(pid)
     {pid, monitor_ref, query_ref}
   end
 
   defp await_results(children, opts) do
     timeout = opts[:timeout] || 5000
-    timer = Process.send_after(self(), :timedout, timeout) 
+    timer = Process.send_after(self(), :timedout, timeout)
     results = await_result(children, [], :infinity)
     cleanup(timer)
     results
@@ -45,7 +51,7 @@ defmodule Rumbl.InfoSys do
         await_result(tail, results ++ acc, timeout)
       {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
         await_result(tail, acc, timeout)
-      :timedout -> 
+      :timedout ->
         kill(pid, monitor_ref)
         await_result(tail, acc, 0)
     after
@@ -59,12 +65,12 @@ defmodule Rumbl.InfoSys do
     acc
   end
 
-  defp kill(pid, ref) do 
+  defp kill(pid, ref) do
     Process.demonitor(ref, [:flush])
     Process.exit(pid, :kill)
   end
 
-  defp cleanup(timer) do  
+  defp cleanup(timer) do
     :erlang.cancel_timer(timer)
     receive do
       :timedout -> :ok
